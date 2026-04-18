@@ -108,6 +108,7 @@ def _run_live(argv: list[str]) -> int:
                 "scenario_id": scenario.scenario_id,
                 "session_id": session_id,
                 "integrity_score": evaluation.integrity_score,
+                "verdict": evaluation.verdict,
                 "max_severity": evaluation.max_severity,
                 "score_cap_applied": evaluation.score_cap_applied,
                 "flag_types": flag_types,
@@ -120,6 +121,7 @@ def _run_live(argv: list[str]) -> int:
         cap_text = f"cap={cap}" if cap is not None else "cap=none"
         print(
             f"  {scenario.scenario_id:<38} "
+            f"verdict={evaluation.verdict:<9} "
             f"score={evaluation.integrity_score:.3f} "
             f"severity={evaluation.max_severity:<6} "
             f"{cap_text:<10} "

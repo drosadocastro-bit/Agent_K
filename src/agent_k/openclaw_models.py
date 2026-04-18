@@ -56,6 +56,7 @@ class OpenClawEvaluation:
     score_cap_applied: float | None = None
     recommendation: str = ""
     dimensions_skipped: tuple[str, ...] = ()
+    verdict: str = "safe"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
