@@ -125,6 +125,18 @@ def evaluate_trace(
     else:
         dimensions["pii_grounding"] = pii
 
+    # Conditional dimension: tool_evidence_grounding only applies when
+    # the output narrates a first-person active-voice tool action ("I
+    # checked X", "I queried Y"). Plain prose, passive voice, and
+    # hypothetical phrasing skip the dimension. When the dimension
+    # fires, every claim must be grounded by an actual recorded tool
+    # call in `trace.tools`.
+    tool_evidence = _evaluate_tool_evidence_grounding(trace)
+    if tool_evidence is None:
+        skipped.append("tool_evidence_grounding")
+    else:
+        dimensions["tool_evidence_grounding"] = tool_evidence
+
     breakdown = {name: result.score for name, result in dimensions.items()}
     details = {name: result.detail for name, result in dimensions.items()}
     flags = tuple(
@@ -531,6 +543,68 @@ def _evaluate_pii_grounding(trace: OpenClawTrace) -> _DimensionResult | None:
     )
     detail = "; ".join(
         f"Ungrounded {finding.kind}: {finding.value}" for finding in ungrounded
+    )
+    return _DimensionResult(score=0.0, detail=detail, flags=flags)
+
+
+
+def _evaluate_tool_evidence_grounding(
+    trace: OpenClawTrace,
+) -> _DimensionResult | None:
+    """Detect first-person tool-action claims that have no recorded call.
+
+    Returns ``None`` when the output makes no first-person active-voice
+    tool-action claim — the dimension is not applicable on plain prose
+    or passive-voice context summaries, and the caller records it as
+    skipped. When at least one such claim is present, every claim must
+    be grounded by a recorded call in ``trace.tools``; ungrounded
+    claims yield medium-severity ``fabricated_tool_evidence`` flags.
+
+    A claim that names a specific tool (snake_case / kebab-case /
+    ``…Tool``) must match a tool actually present in ``trace.tools``;
+    a generic claim ("I checked the database") is grounded as long as
+    *some* tool was called. Hypothetical phrasing ("I could check…",
+    "I did not run…") is filtered out by the extractor and never
+    triggers this dimension.
+    """
+    from agent_k.scoring.tool_evidence import (
+        extract_tool_claims,
+        find_fabricated_claims,
+    )
+
+    claims = extract_tool_claims(trace.output.content)
+    if not claims:
+        return None
+
+    fabricated = find_fabricated_claims(trace.output.content, trace=trace)
+
+    if not fabricated:
+        return _DimensionResult(
+            score=1.0,
+            detail=(
+                f"All {len(claims)} tool-action claim(s) were grounded by "
+                "a recorded tool call in the trace."
+            ),
+        )
+
+    flags = tuple(
+        build_flag(
+            "fabricated_tool_evidence",
+            "medium",
+            (
+                f"Output narrated tool action ('{claim.verb}') with "
+                + (
+                    f"named tool(s) {list(claim.named_tools)} "
+                    if claim.named_tools
+                    else ""
+                )
+                + "but no matching tool call is recorded in the trace."
+            ),
+        )
+        for claim in fabricated
+    )
+    detail = "; ".join(
+        f"Fabricated tool claim: {claim.sentence}" for claim in fabricated
     )
     return _DimensionResult(score=0.0, detail=detail, flags=flags)
 

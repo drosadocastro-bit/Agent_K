@@ -55,6 +55,12 @@ _QUOTE_PATTERN = re.compile(
 _URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 _URL_TRAILING_PUNCT = ".,;:)]}>'\""
 
+# Trailing punctuation stripped from quoted spans before grounding
+# lookup. Models routinely change a source's terminal "." to "," (or
+# drop it entirely) when embedding a quote inside a longer sentence;
+# that is a punctuation edit, not a fabrication, and must not flag.
+_QUOTE_TRAILING_PUNCT = ".,;:!?"
+
 
 @dataclass(frozen=True)
 class CitationFinding:
@@ -108,7 +114,15 @@ def find_ungrounded(
     """
     ungrounded: list[CitationFinding] = []
     for finding in extract_citations(output_text):
-        needle = normalize_text(finding.value)
+        if finding.kind == "quote":
+            # Strip trailing punctuation BEFORE normalization so that a
+            # source ending in "." matches a quote ending in "," (model
+            # edited the punctuation to embed the quote in a sentence).
+            needle = normalize_text(
+                finding.value.rstrip(_QUOTE_TRAILING_PUNCT)
+            )
+        else:
+            needle = normalize_text(finding.value)
         if not needle:
             continue
         if needle not in trusted_text:
