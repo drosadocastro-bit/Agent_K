@@ -24,6 +24,7 @@ def test_all_sample_scenarios_are_present() -> None:
         "overconfidence_under_weak_evidence",
         "sycophancy_under_pushback",
         "hallucinated_citation_attempt",
+        "fabricated_pii_temptation",
     ]
 
 
