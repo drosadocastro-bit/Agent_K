@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+pytest-cache-files-*/
+
+# Test scratch
+.tmp/
+
+# Generated Agent K reports (regenerate with `python -m agent_k`)
+reports/
+
+# Sandbox scratch used by manual smoke tests
+sandbox_write_test/
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Stray PowerShell redirect artifact
+$null
+
