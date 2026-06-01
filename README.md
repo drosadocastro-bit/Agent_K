@@ -12,9 +12,10 @@ in the evaluation path.
 ## Features
 
 - Pure standard-library Python, zero runtime dependencies
-- Pytest-based test suite (58 tests as of this version)
+- Pytest-based test suite (63 tests as of this version)
 - Deterministic scenario runner for repeatable evaluations
 - Trace collection for prompt, context, output, tool calls, and metadata
+- Generic OpenClaw trace-file evaluation via `eval-trace`
 - Severity-gated score caps (`high → 0.35`, `medium → 0.65`)
 - JSON + Markdown reports with full audit trail
 - **Single-label verdict** (`safe` / `doubtful` / `unsafe` / `untrusted`)
@@ -109,6 +110,42 @@ path passed via `--summary-out`. The runner declares the
 `UNCALIBRATED_CHAT` profile, so `confidence_calibration` is skipped
 rather than flagged on every turn.
 
+### Generic OpenClaw trace evaluation
+
+```powershell
+python -m agent_k eval-trace reports\openclaw\some-session\trace.json
+```
+
+This loads an existing OpenClaw-style `trace.json`, evaluates it through
+the same deterministic scoring path used by live captures, and writes
+`evaluation.json` plus `evaluation.md` next to the trace by default. Use
+`--json-out` and `--markdown-out` to choose explicit output paths.
+
+This is the preferred integration boundary for external systems: emit an
+OpenClaw trace, then let Agent K score the evidence without requiring a
+custom app-specific runner.
+
+### Black-box bridge evaluation against Manatuabon
+
+```powershell
+python -m agent_k bridge "What evidence do we have for the Vela pulsar recovery?"
+```
+
+If the Manatuabon bridge is alive but the underlying local model is slow,
+increase the HTTP timeout:
+
+```powershell
+python -m agent_k bridge "What evidence do we have for the Vela pulsar recovery?" --timeout 300
+```
+
+This queries a running Manatuabon bridge on `http://127.0.0.1:7777`,
+captures the returned answer plus cited memory summaries, and writes an
+OpenClaw trace and evaluation under `reports/openclaw/`. This is a
+black-box harness: Agent K does not need to be installed into the
+Manatuabon repo, and Manatuabon does not need any OpenClaw package.
+The tradeoff is that internal tool calls are not captured in this mode,
+so `tool_evidence_grounding` only sees the external bridge response.
+
 ## Architecture invariants
 
 These rules govern any future change to Agent K:
@@ -143,15 +180,16 @@ The verdict is documentation, not a routing primitive: code that needs
 to branch on integrity should branch on `max_severity` or
 `score_cap_applied` directly.
 
-The current suite is **58 tests**, run with `python -m pytest`.
+The current suite is **63 tests**, run with `python -m pytest`.
 
 | Test file | Coverage |
 |---|---|
 | `tests/test_scoring.py` | Per-dimension scoring math, severity caps, missing-confidence handling |
 | `tests/test_runner.py` | Scenario loading, scenario-id contract, scenario ordering |
-| `tests/test_reports.py` | JSON / Markdown report shape and round-trip |
+| `tests/test_reports.py` | JSON / Markdown report shape, offline CLI output, generic `eval-trace` CLI output |
 | `tests/test_openclaw_integration.py` | Autonomous evaluator behaviour, conditional dimensions, profile-driven skips, every false-positive guardrail (apostrophe contractions, polite re-confirmation, generic protected nouns, untrusted-source laundering) |
 | `tests/test_ollama_runner.py` | Live runner end-to-end with mocked HTTP |
+| `tests/test_manatuabon_runner.py` | Optional black-box Manatuabon bridge runner, including timeout error handling |
 
 Every detector has paired tests: one for the failure mode it should catch
 ("flagged when …") and one for the false positive it must avoid

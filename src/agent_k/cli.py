@@ -4,6 +4,10 @@ import argparse
 import json
 from pathlib import Path
 
+from agent_k.openclaw_evaluator import evaluate_trace
+from agent_k.openclaw_models import trace_from_dict
+from agent_k.openclaw_report_json import render_openclaw_json
+from agent_k.openclaw_report_markdown import render_openclaw_markdown
 from agent_k.report_json import render_json_report
 from agent_k.report_markdown import render_markdown_summary
 from agent_k.runner import ScenarioRunner
@@ -62,6 +66,55 @@ def _build_live_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_bridge_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="agent-k bridge",
+        description="Query a running Manatuabon bridge and score the response with Agent K.",
+    )
+    parser.add_argument("prompt", help="Prompt to send to the bridge.")
+    parser.add_argument(
+        "--host",
+        default="http://127.0.0.1:7777",
+        help="Base URL of the Manatuabon bridge.",
+    )
+    parser.add_argument(
+        "--base-dir",
+        default="reports/openclaw",
+        help="Directory for OpenClaw traces and per-session reports.",
+    )
+    parser.add_argument(
+        "--session-id",
+        default="manatuabon-bridge-eval",
+        help="Session id for the captured run.",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=120.0,
+        help="HTTP timeout in seconds for bridge requests.",
+    )
+    return parser
+
+
+def _build_eval_trace_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="agent-k eval-trace",
+        description="Evaluate an existing OpenClaw trace JSON file with Agent K.",
+    )
+    parser.add_argument("trace_path", help="Path to an OpenClaw trace JSON file.")
+    parser.add_argument(
+        "--json-out",
+        default=None,
+        help="Path for the evaluation JSON output. Defaults to evaluation.json next to the trace.",
+    )
+    parser.add_argument(
+        "--markdown-out",
+        default=None,
+        help="Path for the evaluation Markdown output. Defaults to evaluation.md next to the trace.",
+    )
+    return parser
+
+
 def main(argv: list[str] | None = None) -> int:
     # Dispatch: the first positional "live" selects the live-agent subcommand.
     # Everything else preserves the legacy offline CLI contract.
@@ -70,6 +123,10 @@ def main(argv: list[str] | None = None) -> int:
     effective_argv = list(argv) if argv is not None else sys.argv[1:]
     if effective_argv and effective_argv[0] == "live":
         return _run_live(effective_argv[1:])
+    if effective_argv and effective_argv[0] == "bridge":
+        return _run_bridge(effective_argv[1:])
+    if effective_argv and effective_argv[0] == "eval-trace":
+        return _run_eval_trace(effective_argv[1:])
 
     parser = build_parser()
     args = parser.parse_args(effective_argv)
@@ -141,6 +198,68 @@ def _run_live(argv: list[str]) -> int:
         )
         print(f"Wrote summary: {summary_path}")
 
+    return 0
+
+
+def _run_bridge(argv: list[str]) -> int:
+    from agent_k.agents.manatuabon import ManatuabonBridgeRunner
+    from agent_k.agents.manatuabon import ManatuabonBridgeError
+    from agent_k.openclaw_capture import OpenClawCapture
+    import sys
+
+    args = _build_bridge_parser().parse_args(argv)
+    capture = OpenClawCapture(base_dir=args.base_dir)
+    runner = ManatuabonBridgeRunner(capture, host=args.host, timeout=args.timeout)
+    try:
+        result = runner.run_prompt(args.prompt, session_id=args.session_id)
+    except ManatuabonBridgeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    evaluation = result.evaluation
+    flag_types = sorted({flag.type for flag in evaluation.flags})
+
+    print(
+        f"verdict={evaluation.verdict:<9} "
+        f"score={evaluation.integrity_score:.3f} "
+        f"severity={evaluation.max_severity:<6} "
+        f"flags={','.join(flag_types) or 'none'}"
+    )
+    print(f"trace={result.artifacts.trace_path}")
+    print(f"evaluation_json={result.artifacts.evaluation_json_path}")
+    print(f"evaluation_markdown={result.artifacts.evaluation_markdown_path}")
+    print(f"report_log={result.artifacts.report_log_path}")
+    return 0
+
+
+def _run_eval_trace(argv: list[str]) -> int:
+    import sys
+
+    args = _build_eval_trace_parser().parse_args(argv)
+    trace_path = Path(args.trace_path)
+    json_path = Path(args.json_out) if args.json_out else trace_path.parent / "evaluation.json"
+    markdown_path = Path(args.markdown_out) if args.markdown_out else trace_path.parent / "evaluation.md"
+
+    try:
+        trace_data = json.loads(trace_path.read_text(encoding="utf-8"))
+        trace = trace_from_dict(trace_data)
+        evaluation = evaluate_trace(trace)
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        print(f"Could not evaluate trace '{trace_path}': {exc}", file=sys.stderr)
+        return 2
+
+    _write_output(json_path, render_openclaw_json(evaluation))
+    _write_output(markdown_path, render_openclaw_markdown(trace, evaluation))
+
+    flag_types = sorted({flag.type for flag in evaluation.flags})
+    print(
+        f"verdict={evaluation.verdict:<9} "
+        f"score={evaluation.integrity_score:.3f} "
+        f"severity={evaluation.max_severity:<6} "
+        f"flags={','.join(flag_types) or 'none'}"
+    )
+    print(f"evaluation_json={json_path}")
+    print(f"evaluation_markdown={markdown_path}")
     return 0
 
 
