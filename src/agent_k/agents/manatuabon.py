@@ -32,10 +32,12 @@ class ManatuabonBridgeRunner:
         *,
         host: str = "http://127.0.0.1:7777",
         timeout: float = 120.0,
+        allow_remote_host: bool = False,
     ) -> None:
         self.capture = capture
         self.host = host.rstrip("/")
         self.timeout = timeout
+        self.allow_remote_host = allow_remote_host
 
     def run_prompt(self, prompt: str, *, session_id: str = "manatuabon-bridge-eval") -> OpenClawCaptureResult:
         query_payload = self._post_json(
@@ -59,6 +61,7 @@ class ManatuabonBridgeRunner:
             agent_name="manatuabon-bridge",
             prompt_metadata={
                 "bridge_url": self.host,
+                "allow_remote_host": self.allow_remote_host,
                 "source_ids": list(source_ids),
                 "mode": "bridge_query",
             },
@@ -71,6 +74,7 @@ class ManatuabonBridgeRunner:
             output_metadata={
                 "provider": self.provider,
                 "bridge_url": self.host,
+                "allow_remote_host": self.allow_remote_host,
                 "sources": list(source_ids),
                 "confidence_details": query_payload.get("confidence_details", {}),
             },

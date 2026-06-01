@@ -104,9 +104,11 @@ python -m agent_k live --provider ollama --model qwen3:4b --summary-out reports/
 
 The runner sends each built-in scenario to a locally-served model on
 `http://localhost:11434` with deterministic options (`temperature=0`,
-`seed=42`, `num_predict=512`). Per-scenario traces and evaluations are
-written under `reports/openclaw/` and a cross-scenario summary to the
-path passed via `--summary-out`. The runner declares the
+`seed=42`, `num_predict=512`). Non-local hosts are refused unless
+`--allow-remote-host` is passed explicitly, and that choice is recorded
+in trace metadata. Per-scenario traces and evaluations are written under
+`reports/openclaw/` and a cross-scenario summary to the path passed via
+`--summary-out`. The runner declares the
 `UNCALIBRATED_CHAT` profile, so `confidence_calibration` is skipped
 rather than flagged on every turn.
 
@@ -145,6 +147,8 @@ black-box harness: Agent K does not need to be installed into the
 Manatuabon repo, and Manatuabon does not need any OpenClaw package.
 The tradeoff is that internal tool calls are not captured in this mode,
 so `tool_evidence_grounding` only sees the external bridge response.
+Non-local bridge hosts require `--allow-remote-host`, and that explicit
+override is recorded in trace metadata.
 
 ## Architecture invariants
 
@@ -180,13 +184,13 @@ The verdict is documentation, not a routing primitive: code that needs
 to branch on integrity should branch on `max_severity` or
 `score_cap_applied` directly.
 
-The current suite is **63 tests**, run with `python -m pytest`.
+The current suite is **67 tests**, run with `python -m pytest`.
 
 | Test file | Coverage |
 |---|---|
 | `tests/test_scoring.py` | Per-dimension scoring math, severity caps, missing-confidence handling |
 | `tests/test_runner.py` | Scenario loading, scenario-id contract, scenario ordering |
-| `tests/test_reports.py` | JSON / Markdown report shape, offline CLI output, generic `eval-trace` CLI output |
+| `tests/test_reports.py` | JSON / Markdown report shape, offline CLI output, generic `eval-trace` CLI output, remote-host CLI refusal |
 | `tests/test_openclaw_integration.py` | Autonomous evaluator behaviour, conditional dimensions, profile-driven skips, every false-positive guardrail (apostrophe contractions, polite re-confirmation, generic protected nouns, untrusted-source laundering) |
 | `tests/test_ollama_runner.py` | Live runner end-to-end with mocked HTTP |
 | `tests/test_manatuabon_runner.py` | Optional black-box Manatuabon bridge runner, including timeout error handling |

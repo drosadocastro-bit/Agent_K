@@ -36,6 +36,7 @@ class OllamaRunner(AgentRunner):
         temperature: float = 0.0,
         num_predict: int = 512,
         timeout: float = 120.0,
+        allow_remote_host: bool = False,
     ) -> None:
         super().__init__(capture)
         self.model = model
@@ -44,6 +45,7 @@ class OllamaRunner(AgentRunner):
         self.temperature = temperature
         self.num_predict = num_predict
         self.timeout = timeout
+        self.allow_remote_host = allow_remote_host
 
     # ---- HTTP helpers -------------------------------------------------
 
@@ -125,6 +127,7 @@ class OllamaRunner(AgentRunner):
             "provider": self.provider,
             "model": self.model,
             "host": self.host,
+            "allow_remote_host": self.allow_remote_host,
             "temperature": self.temperature,
             "seed": self.seed,
             "num_predict": self.num_predict,
@@ -145,7 +148,14 @@ def build_default_runner(
     base_dir: str = "reports/openclaw",
     host: str = "http://localhost:11434",
     seed: int = 42,
+    allow_remote_host: bool = False,
 ) -> OllamaRunner:
     """Convenience constructor used by the CLI."""
     capture = OpenClawCapture(base_dir=base_dir)
-    return OllamaRunner(capture, model=model, host=host, seed=seed)
+    return OllamaRunner(
+        capture,
+        model=model,
+        host=host,
+        seed=seed,
+        allow_remote_host=allow_remote_host,
+    )

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from urllib.parse import urlparse
 
 from agent_k.openclaw_evaluator import evaluate_trace
 from agent_k.openclaw_models import trace_from_dict
@@ -52,6 +53,11 @@ def _build_live_parser() -> argparse.ArgumentParser:
         help="Scenario id to run. Defaults to all built-in scenarios.",
     )
     parser.add_argument("--host", default="http://localhost:11434")
+    parser.add_argument(
+        "--allow-remote-host",
+        action="store_true",
+        help="Allow sending scenario prompts to a non-local host. Defaults to localhost-only.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--base-dir",
@@ -76,6 +82,11 @@ def _build_bridge_parser() -> argparse.ArgumentParser:
         "--host",
         default="http://127.0.0.1:7777",
         help="Base URL of the Manatuabon bridge.",
+    )
+    parser.add_argument(
+        "--allow-remote-host",
+        action="store_true",
+        help="Allow sending bridge prompts to a non-local host. Defaults to localhost-only.",
     )
     parser.add_argument(
         "--base-dir",
@@ -149,9 +160,17 @@ def _run_live(argv: list[str]) -> int:
     from agent_k.openclaw_capture import OpenClawCapture
 
     args = _build_live_parser().parse_args(argv)
+    if not _validate_local_host(args.host, allow_remote_host=args.allow_remote_host):
+        return 2
     scenarios = _select_scenarios(tuple(args.scenario or ("all",)))
     capture = OpenClawCapture(base_dir=args.base_dir)
-    runner = OllamaRunner(capture, model=args.model, host=args.host, seed=args.seed)
+    runner = OllamaRunner(
+        capture,
+        model=args.model,
+        host=args.host,
+        seed=args.seed,
+        allow_remote_host=args.allow_remote_host,
+    )
 
     summary: list[dict] = []
     print(f"Running {len(scenarios)} scenario(s) against {args.provider}:{args.model}")
@@ -208,8 +227,15 @@ def _run_bridge(argv: list[str]) -> int:
     import sys
 
     args = _build_bridge_parser().parse_args(argv)
+    if not _validate_local_host(args.host, allow_remote_host=args.allow_remote_host):
+        return 2
     capture = OpenClawCapture(base_dir=args.base_dir)
-    runner = ManatuabonBridgeRunner(capture, host=args.host, timeout=args.timeout)
+    runner = ManatuabonBridgeRunner(
+        capture,
+        host=args.host,
+        timeout=args.timeout,
+        allow_remote_host=args.allow_remote_host,
+    )
     try:
         result = runner.run_prompt(args.prompt, session_id=args.session_id)
     except ManatuabonBridgeError as exc:
@@ -270,6 +296,25 @@ def _select_scenarios(selected_ids: tuple[str, ...]):
 
     selected_lookup = set(selected_ids)
     return tuple(scenario for scenario in scenarios if scenario.scenario_id in selected_lookup)
+
+
+def _validate_local_host(host: str, *, allow_remote_host: bool) -> bool:
+    if allow_remote_host:
+        return True
+
+    import sys
+
+    parsed = urlparse(host)
+    hostname = parsed.hostname
+    local_hosts = {"localhost", "127.0.0.1", "::1"}
+    if hostname in local_hosts:
+        return True
+
+    print(
+        f"Refusing non-local host '{host}'. Re-run with --allow-remote-host to acknowledge network egress.",
+        file=sys.stderr,
+    )
+    return False
 
 
 def _write_output(path: Path, content: str) -> None:

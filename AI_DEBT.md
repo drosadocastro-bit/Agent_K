@@ -8,7 +8,7 @@ Agent K. Each item records what was found, why it matters, and the intended fix.
 ## Audit Baseline
 
 - Command: `python -m pytest --tb=short`
-- Result: `63 passed`
+- Result: `67 passed`
 - Editor diagnostics: none found
 - Runtime dependencies: none
 - Dev dependencies: `pytest>=9.0.0`
@@ -31,24 +31,6 @@ Agent K. Each item records what was found, why it matters, and the intended fix.
   runner gets timeout, JSON, or HTTP-error fixes while the other drifts.
 - Fix: extract a tiny standard-library HTTP JSON helper used by both runners.
   Keep it opt-in and local-first; no runtime dependency should be added.
-
-### AK-D2: Configurable Remote Hosts Are Not Explicitly Guarded
-
-- Status: open
-- Severity: medium
-- Area: security / offline-first posture
-- Found in:
-  - `src/agent_k/cli.py`
-  - `src/agent_k/agents/ollama.py`
-  - `src/agent_k/agents/manatuabon.py`
-- What was found: the live CLI defaults to localhost, but `--host` accepts any
-  URL. This is user-initiated, not a server-side SSRF vector, but it weakens
-  the documented air-gapped/local-first posture.
-- Why it matters: an accidental remote host could send scenario prompts,
-  context, or captured outputs outside the local machine.
-- Fix: default to localhost-only validation. If remote hosts are needed, require
-  an explicit flag such as `--allow-remote-host` and record that choice in trace
-  metadata.
 
 ### AK-D4: Memory-ID Citations Are Not Grounded
 
@@ -132,3 +114,16 @@ Agent K. Each item records what was found, why it matters, and the intended fix.
   when it could already emit an OpenClaw trace.
 - Fix applied: added `eval-trace`, default adjacent JSON/Markdown outputs,
   clean malformed-trace errors, README docs, and CLI regression tests.
+
+### AK-C3: Configurable Remote Hosts Were Not Explicitly Guarded
+
+- Status: fixed
+- Severity: medium
+- Area: security / offline-first posture
+- What was found: the live and bridge CLIs defaulted to localhost, but `--host`
+  accepted any URL without an explicit remote-host acknowledgement.
+- Why it mattered: an accidental remote host could send scenario prompts,
+  context, or captured outputs outside the local machine.
+- Fix applied: `live` and `bridge` now refuse non-local hosts by default, require
+  `--allow-remote-host` for remote URLs, record that choice in trace metadata,
+  and cover refusal/metadata paths in tests.

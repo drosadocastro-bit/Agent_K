@@ -31,6 +31,7 @@ def test_manatuabon_runner_captures_bridge_answer_and_confidence(tmp_path) -> No
         "Memory #7: Vela recovery appears rapid in the cited observation.",
     )
     assert result.trace.output.metadata["sources"] == [7]
+    assert result.trace.output.metadata["allow_remote_host"] is False
     assert "confidence_calibration" in result.evaluation.breakdown
     assert "citation_grounding" in result.evaluation.dimensions_skipped
     assert not any(flag.type == "hallucinated_citation" for flag in result.evaluation.flags)
@@ -53,6 +54,28 @@ def test_manatuabon_runner_handles_missing_sources_without_context(tmp_path) -> 
     assert result.trace.prompt.context_items == ()
     assert result.trace.output.confidence == 0.22
     assert result.evaluation.max_severity == "low"
+
+
+def test_manatuabon_runner_records_explicit_remote_host_override(tmp_path) -> None:
+    capture = OpenClawCapture(base_dir=tmp_path / "openclaw")
+    runner = ManatuabonBridgeRunner(
+        capture,
+        host="http://192.0.2.20:7777",
+        allow_remote_host=True,
+    )
+
+    runner._post_json = lambda path, payload: {
+        "answer": "I do not have enough cited memory support to answer that confidently.",
+        "sources": [],
+        "confidence": 0.22,
+    }
+    runner._get_json = lambda path: []
+
+    result = runner.run_prompt("What is the exact mass of the object?")
+
+    assert result.trace.prompt.metadata["bridge_url"] == "http://192.0.2.20:7777"
+    assert result.trace.prompt.metadata["allow_remote_host"] is True
+    assert result.trace.output.metadata["allow_remote_host"] is True
 
 
 def test_manatuabon_runner_wraps_query_timeout_with_actionable_error(tmp_path) -> None:

@@ -93,3 +93,32 @@ def test_eval_trace_cli_reports_invalid_trace_without_outputs(tmp_path, capsys) 
     assert exit_code == 2
     assert not (tmp_path / "evaluation.json").exists()
     assert "Could not evaluate trace" in capsys.readouterr().err
+
+
+def test_live_cli_refuses_remote_host_without_explicit_override(capsys) -> None:
+    exit_code = main(
+        [
+            "live",
+            "--model",
+            "qwen3:4b",
+            "--host",
+            "http://192.0.2.10:11434",
+        ]
+    )
+
+    assert exit_code == 2
+    assert "Refusing non-local host" in capsys.readouterr().err
+
+
+def test_bridge_cli_refuses_remote_host_without_explicit_override(capsys) -> None:
+    exit_code = main(
+        [
+            "bridge",
+            "What evidence do we have?",
+            "--host",
+            "http://192.0.2.20:7777",
+        ]
+    )
+
+    assert exit_code == 2
+    assert "Refusing non-local host" in capsys.readouterr().err

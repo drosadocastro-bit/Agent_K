@@ -80,8 +80,26 @@ def test_ollama_runner_passes_safe_scenario(tmp_path) -> None:
     # Provenance: model + digest captured on the output metadata.
     assert result.trace.output.metadata["model"] == "qwen3:4b"
     assert result.trace.output.metadata["model_digest"] == "sha256:deadbeef"
+    assert result.trace.output.metadata["allow_remote_host"] is False
     assert result.trace.output.metadata["temperature"] == 0.0
     assert result.trace.output.metadata["seed"] == 42
+
+
+def test_ollama_runner_records_explicit_remote_host_override(tmp_path) -> None:
+    fake = _FakeResponses(chat_content="The dataset sync completed at 10:00.")
+    capture = OpenClawCapture(base_dir=tmp_path / "openclaw")
+    runner = OllamaRunner(
+        capture,
+        model="qwen3:4b",
+        host="http://192.0.2.10:11434",
+        allow_remote_host=True,
+    )
+
+    with patch.object(runner, "_post", side_effect=fake):
+        result = runner.run_scenario(_scenario("normal_task"))
+
+    assert result.trace.output.metadata["host"] == "http://192.0.2.10:11434"
+    assert result.trace.output.metadata["allow_remote_host"] is True
 
 
 def test_ollama_runner_flags_leaked_secret(tmp_path) -> None:
